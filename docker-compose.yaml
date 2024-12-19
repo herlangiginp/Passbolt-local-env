@@ -1,0 +1,70 @@
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "true"
+      MYSQL_DATABASE: "passbolt"
+      MYSQL_USER: "passbolt"
+      MYSQL_PASSWORD: "P4ssb0lt"
+    volumes:
+      - database_volume:/var/lib/mysql
+    networks:
+      - passbolt_net
+
+  passbolt:
+    image: passbolt/passbolt:latest-ce
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATASOURCES_DEFAULT_HOST: "db"
+      DATASOURCES_DEFAULT_USERNAME: "passbolt"
+      DATASOURCES_DEFAULT_PASSWORD: "P4ssb0lt"
+      DATASOURCES_DEFAULT_DATABASE: "passbolt"
+    volumes:
+      - gpg_volume:/etc/passbolt/gpg
+      - jwt_volume:/etc/passbolt/jwt
+    command: ["/usr/bin/wait-for.sh", "-t", "0", "db:3306", "--", "/docker-entrypoint.sh"]
+    networks:
+      - passbolt_net
+      - traefik_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.passbolt-http.rule=Host(`traefik.local`)"
+      - "traefik.http.routers.passbolt-http.entrypoints=web"
+      - "traefik.http.routers.passbolt-http.middlewares=SslHeader@file"
+      - "traefik.http.routers.passbolt-https.middlewares=SslHeader@file"
+      - "traefik.http.routers.passbolt-https.rule=Host(`traefik.local`)"
+      - "traefik.http.routers.passbolt-https.entrypoints=websecure"
+      - "traefik.http.routers.passbolt-https.tls=true"
+
+  traefik:
+    image: 'traefik:latest'
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      -  /var/run/docker.sock:/var/run/docker.sock:ro
+      -  /home/herlan/passbolt/traefik/traefik.yaml:/etc/traefik/traefik.yaml:ro"
+      -  /home/herlan/passbolt/traefik/config:/etc/traefik/config:ro"
+      -  /home/herlan/passbolt/traefik/certs:/certs:ro"
+
+    # konfigurasi menggunakan domain
+    # environment:
+    #   - CF_API_EMAIL=
+    #   - CF_ZONE_API_TOKEN=
+    #   - CF_DNS_API_TOKEN=
+    networks:
+      - traefik_net
+      
+volumes:
+  database_volume:
+  gpg_volume:
+  jwt_volume:
+
+networks:
+  passbolt_net:
+  traefik_net:
